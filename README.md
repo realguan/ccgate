@@ -1,162 +1,145 @@
-# Claude Code Platform Selector (cctool) v1.1.0
+# Claude Code Platform Selector (cctool)
 
-这是一个用 Go 语言编写的交互式工具，用于动态选择和启动 Claude Code 平台接口。
+这是一个用 Go 语言编写的交互式工具，用于管理并启动 Claude Code 平台配置。
 
 ## 功能特性
 
-- 🔄 交互式平台选择界面
-- 📁 多配置文件支持（JSON格式）
-- 🛠️ 命令行参数支持（列表、添加、删除平台等）
-- 🌐 多平台支持（Anthropic、Qwen等）
-- ✅ 配置验证和错误处理
-- 🧪 单元测试覆盖
+### 命令行选项
 
-## 安装
+命令基于子命令（Cobra）。全局 flag:
 
-### 方法1：使用 Makefile（推荐）
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）。
+
+常用子命令:
+
 ```bash
-# 构建并安装
-make install
-
-# 或者分步执行
-make build
-make install
+cctool list           # 列出所有可用平台
+cctool add            # 交互式添加或更新平台
+cctool delete <name>  # 删除指定名称的平台
+cctool version        # 显示版本信息
+cctool completion bash|zsh  # 生成 shell 自动补全脚本
 ```
 
-### 方法2：手动构建
+### 示例
+
 ```bash
-# 构建二进制文件
-go build -o build/cctool
+# 列出所有平台
+cctool list
 
-# 复制到 ~/bin 目录
-mkdir -p ~/bin
-cp build/cctool ~/bin/cctool
-```
+# 交互式选择并启动（默认：直接运行根命令）
+cctool
 
-### 方法3：直接安装
-```bash
-# 直接安装到 GOPATH/bin
-go install
+# 使用指定平台直接启动（flags 在根命令上）
+cctool --platform qwen
 
-# 然后复制到 ~/bin
-cp $(go env GOPATH)/bin/cctool ~/bin/cctool
+# 交互选择后跳过确认并直接启动
+cctool --yes
+
+# 仅打印将设置的环境变量（dry-run）
+cctool --platform qwen --dry-run
+
+# 添加新平台
+cctool add
+
+# 删除平台
+cctool delete default
+
+# 生成 bash 自动补全脚本
+cctool completion bash > /etc/bash_completion.d/cctool
+
+# 使用自定义配置文件
+cctool --config /path/to/custom-config.json list
 ```
 
 ## 使用方法
 
-### 交互式选择平台并启动 Claude Code
+cctool 是一个用 Go 编写的轻量命令行工具，用来管理并启动不同的 Claude Code 平台配置（通过设置环境变量并执行 `claude` 可执行文件）。
+
+主要特点:
+- 使用交互式选择（promptui）或命令行子命令启动平台
+- 平台配置使用 JSON 文件（默认 `~/.cctool/config.json`）
+- 基于 Cobra 提供子命令、help 与自动补全支持
+
+### 安装
+
+推荐使用 Makefile：
+
 ```bash
-cctool
+make build    # 构建二进制到 build/cctool
+make install  # 安装到 ~/bin
 ```
 
-运行后会显示可用平台列表，输入数字选择平台，工具将自动设置环境变量并启动 Claude Code。
+### 快速使用说明（CLI 概览）
 
-### 命令行选项
+全局 flag:
 
-```bash
-cctool [选项]
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）
 
-选项:
-  -list          列出所有可用平台
-  -platform name 直接使用指定平台
-  -f path        指定配置文件路径
-  -add           添加新平台
-  -delete name   按名称删除平台
-  -help, -h      显示帮助信息
-  -version, -v   显示版本信息
-```
+主要子命令:
 
-### 示例用法
+- `list` — 列出所有可用平台
+- `add` — 交互式添加或更新平台配置
+- `delete <name>` — 删除指定名称的平台
+- `version` — 输出工具版本
+- `completion <bash|zsh>` — 在 stdout 生成自动补全脚本
+
+### 示例
 
 ```bash
 # 列出所有平台
-cctool -list
+cctool list
 
-# 直接使用指定平台
-cctool -platform qwen
+# 交互式选择并启动（默认行为 — 直接运行根命令）
+cctool
 
-# 添加新平台
-cctool -add
+# 使用指定平台直接启动（flags 在根命令上）
+cctool --platform myPlatform
 
-# 删除平台
-cctool -delete default
+# 指定配置文件并列出
+cctool --config ./platforms.json list
 
-# 使用自定义配置文件
-cctool -f /path/to/custom-config.json
+# 仅打印环境变量（dry-run）
+cctool --platform myPlatform --dry-run
+
+# 生成 bash 自动补全脚本
+cctool completion bash > /etc/bash_completion.d/cctool
 ```
 
 ## 配置文件
 
-平台配置存储在 JSON 文件中，支持以下查找顺序：
+默认路径：`~/.cctool/config.json`（也可使用 `--config` 指定）
 
-1. `~/.cctool/config.json` (用户特定配置)
-2. 当前目录中的 `platforms.json`
-
-配置文件格式如下：
+格式示例：
 
 ```json
 {
   "platforms": [
     {
-      "name": "平台名称",
-      "vendor": "厂商名称（可选）",
-      "ANTHROPIC_BASE_URL": "API基础URL",
-      "ANTHROPIC_AUTH_TOKEN": "认证令牌",
-      "ANTHROPIC_MODEL": "模型名称",
-      "ANTHROPIC_SMALL_FAST_MODEL": "快速小模型名称"
+      "name": "default",
+      "vendor": "Anthropic",
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "<REDACTED>",
+      "ANTHROPIC_MODEL": "claude-2",
+      "ANTHROPIC_SMALL_FAST_MODEL": "claude-2.1-small"
     }
   ]
 }
 ```
 
-可以修改此文件以添加或更改平台配置。
+## 安全与注意事项
+
+- 输出/日志中会掩码认证令牌的一部分（dry-run 也会掩码）
+- 不要将敏感令牌以明文提交到版本控制
 
 ## 开发
 
-### 构建
-```bash
-# 构建项目
-make build
-
-# 构建所有平台版本
-make build-all
-
-# 构建特定平台版本
-make build-linux
-make build-mac
-make build-windows
-```
-
-### 清理
-```bash
-make clean
-```
-
-### 代码格式化和检查
-```bash
-# 格式化代码
-make fmt
-
-# 检查代码问题
-make vet
-```
-
-### 运行测试
 ```bash
 # 运行测试
 make test
 
-# 运行测试并查看覆盖率
-make test-cover
+# 格式化 & 检查
+make fmt
+make vet
 ```
 
-### 依赖管理
-```bash
-# 整理Go模块依赖
-make tidy
-```
-
-### 查看所有可用命令
-```bash
-make help
-```
+如需帮助，运行 `cctool --help` 或 `cctool <subcommand> --help` 获取自动生成的使用说明。

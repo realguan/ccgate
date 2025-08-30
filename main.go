@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/manifoldco/promptui"
+	"golang.org/x/term"
 )
 
 // Platform represents a platform configuration
@@ -25,6 +25,24 @@ type Platform struct {
 // Config represents the configuration structure
 type Config struct {
 	Platforms []Platform `json:"platforms"`
+}
+
+// validatePlatforms checks all platforms and returns an error if any are invalid
+func validatePlatforms(platforms []Platform) error {
+	if len(platforms) == 0 {
+		return fmt.Errorf("no platforms defined in configuration")
+	}
+	for i, platform := range platforms {
+		if err := platform.Validate(); err != nil {
+			return fmt.Errorf("platform %d: %v", i+1, err)
+		}
+	}
+	return nil
+}
+
+// Validate checks if the configuration is valid
+func (c *Config) Validate() error {
+	return validatePlatforms(c.Platforms)
 }
 
 // Validate checks if the platform configuration is valid
@@ -45,190 +63,9 @@ func (p *Platform) Validate() error {
 	return nil
 }
 
-// Validate checks if the configuration is valid
-func (c *Config) Validate() error {
-	if len(c.Platforms) == 0 {
-		return fmt.Errorf("no platforms defined in configuration")
-	}
-
-	for i, platform := range c.Platforms {
-		if err := platform.Validate(); err != nil {
-			return fmt.Errorf("platform %d: %v", i+1, err)
-		}
-	}
-
-	return nil
-}
-
 func main() {
-	// Define command line flags
-	listFlag := flag.Bool("list", false, "List all available platforms")
-	platformFlag := flag.String("platform", "", "Specify platform to use directly")
-	configFlag := flag.String("f", "", "Specify config file path")
-	helpFlag := flag.Bool("help", false, "Show help message")
-	hFlag := flag.Bool("h", false, "Show help message")
-	versionFlag := flag.Bool("version", false, "Show version information")
-	vFlag := flag.Bool("v", false, "Show version information")
-	addFlag := flag.Bool("add", false, "Add a new platform")
-	deleteFlag := flag.String("delete", "", "Delete a platform by name")
-
-	// Parse flags
-	flag.Parse()
-
-	// Handle command line flags
-	err := handleCommandLineFlags(
-		*listFlag, *platformFlag, *configFlag, *helpFlag, *hFlag,
-		*versionFlag, *vFlag, *addFlag, *deleteFlag,
-	)
-	if err != nil {
-		color.Red("错误: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-// handleCommandLineFlags processes command line flags and executes corresponding actions
-func handleCommandLineFlags(
-	listFlag bool, platformFlag string, configFlag string, helpFlag bool, hFlag bool,
-	versionFlag bool, vFlag bool, addFlag bool, deleteFlag string,
-) error {
-	// Show version if requested
-	if versionFlag || vFlag {
-		color.Cyan("Claude Code 平台选择器 v1.1.0")
-		return nil
-	}
-
-	// Show help if requested
-	if helpFlag || hFlag {
-		showHelp()
-		return nil
-	}
-
-	// Load platforms from JSON file
-	platforms, err := loadPlatforms(configFlag)
-	if err != nil {
-		return fmt.Errorf("加载平台时出错: %v", err)
-	}
-
-	// List platforms if requested
-	if listFlag {
-		listPlatforms(platforms)
-		return nil
-	}
-
-	// Delete platform if requested
-	if deleteFlag != "" {
-		platforms, err = deletePlatform(platforms, deleteFlag)
-		if err != nil {
-			return fmt.Errorf("删除平台时出错: %v", err)
-		}
-		err = savePlatforms(platforms, configFlag)
-		if err != nil {
-			return fmt.Errorf("保存平台时出错: %v", err)
-		}
-		color.Green("平台 '%s' 删除成功!\n", deleteFlag)
-		return nil
-	}
-
-	// Add platform if requested
-	if addFlag {
-		newPlatform, err := addNewPlatform()
-		if err != nil {
-			return fmt.Errorf("添加平台时出错: %v", err)
-		}
-		
-		// 检查是否已存在同名平台，如果存在则更新而不是添加
-		existingIndex := -1
-		for i, platform := range platforms {
-			if platform.Name == newPlatform.Name {
-				existingIndex = i
-				break
-			}
-		}
-		
-		if existingIndex != -1 {
-			// 更新现有平台
-			platforms[existingIndex] = newPlatform
-			color.Yellow("平台 '%s' 已存在，正在更新配置...\n", newPlatform.Name)
-		} else {
-			// 添加新平台
-			platforms = append(platforms, newPlatform)
-		}
-		
-		err = savePlatforms(platforms, configFlag)
-		if err != nil {
-			return fmt.Errorf("保存平台时出错: %v", err)
-		}
-		color.Green("平台 '%s' 保存成功!\n", newPlatform.Name)
-		return nil
-	}
-
-	// Launch Claude Code with selected platform
-	err = launchClaudeWithPlatform(platforms, platformFlag, configFlag)
-	if err != nil {
-		return fmt.Errorf("启动 Claude Code 时出错: %v", err)
-	}
-
-	return nil
-}
-
-// launchClaudeWithPlatform handles the platform selection and launching of Claude Code
-func launchClaudeWithPlatform(platforms []Platform, platformFlag string, _ string) error {
-	// Use specified platform if provided
-	var selectedPlatform Platform
-	var err error
-	if platformFlag != "" {
-		selectedPlatform, err = findPlatformByName(platforms, platformFlag)
-		if err != nil {
-			return err
-		}
-		color.Green("使用平台: %s\n", selectedPlatform.Name)
-	} else {
-		// Display platforms and get user choice with interactive menu
-		selectedPlatform, err = selectPlatformInteractive(platforms)
-		if err != nil {
-			return err
-		}
-		color.Green("\n已选择平台: %s\n", selectedPlatform.Name)
-	}
-
-	// Show platform details before confirmation
-	showPlatformDetails(selectedPlatform)
-
-	// Loop until user confirms launch or chooses to exit
-	for {
-		// Confirm before launching
-		if confirmLaunch() {
-			break // User confirmed, proceed with launch
-		}
-
-		color.Yellow("启动已取消。")
-		// Instead of exiting, ask if user wants to select another platform
-		prompt := promptui.Prompt{
-			Label:     "是否选择其他平台",
-			IsConfirm: true,
-			Default:   "y",
-		}
-		result, err := prompt.Run()
-		if err != nil || (result != "" && result != "y" && result != "Y") {
-			return nil // User chose not to select another platform or there was an error
-		}
-
-		// Go back to platform selection
-		selectedPlatform, err = selectPlatformInteractive(platforms)
-		if err != nil {
-			return err
-		}
-		color.Green("\n已选择平台: %s\n", selectedPlatform.Name)
-	}
-
-	// Set environment variables
-	setEnvironment(selectedPlatform)
-	color.Green("环境变量设置成功!")
-
-	// Launch Claude Code
-	color.Cyan("正在启动 Claude Code...")
-	launchClaudeCode()
-	return nil
+	// 只保留 Cobra CLI 入口
+	Execute()
 }
 
 func getConfigPath() string {
@@ -244,7 +81,7 @@ func getConfigPath() string {
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(configPath)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		os.MkdirAll(dir, 0755)
+		os.MkdirAll(dir, 0o755)
 	}
 
 	return configPath
@@ -264,6 +101,8 @@ func loadPlatforms(configFilePath string) ([]Platform, error) {
 	} else {
 		// Try to read from default config path first
 		configPath := getConfigPath()
+		// Add debug info
+		color.Magenta("调试: 尝试加载配置文件: %s", configPath)
 		data, err = os.ReadFile(configPath)
 		if err != nil {
 			// If no config file found, guide user to create one immediately
@@ -316,6 +155,8 @@ func selectPlatformInteractive(platforms []Platform) (Platform, error) {
 		names[i] = platform.Name
 	}
 
+
+
 	// Create the prompt
 	prompt := promptui.Select{
 		Label: "选择平台 (Ctrl+C退出)",
@@ -355,12 +196,24 @@ func launchClaudeCode() {
 	// This will launch Claude Code with the exported environment variables
 	cmd := exec.Command("claude")
 	cmd.Env = os.Environ()
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	
+	// 检测是否在交互式终端中运行
+	isInteractive := term.IsTerminal(int(os.Stdin.Fd()))
+	
+	if isInteractive {
+		// 在交互式终端中，连接 stdin/stdout/stderr
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		// 在非交互式环境中，断开 stdin/stdout/stderr 连接
+		cmd.Stdin = nil
+		cmd.Stdout = nil
+		cmd.Stderr = nil
+	}
 
 	color.Cyan("执行命令: claude")
-	err := cmd.Run()
+	err := cmd.Start()
 	if err != nil {
 		if _, ok := err.(*exec.Error); ok {
 			color.Red("错误: 未找到 Claude Code 命令。请确保它已安装并在您的 PATH 中。")
@@ -373,7 +226,94 @@ func launchClaudeCode() {
 		return
 	}
 
-	color.Green("Claude Code 已成功启动!")
+	if isInteractive {
+		// 等待进程结束（交互模式）
+		err = cmd.Wait()
+		if err != nil {
+			color.Red("Claude Code 运行时出错: %v", err)
+		} else {
+			color.Green("Claude Code 已退出。")
+		}
+	} else {
+		// 立即退出，让 claude 在后台继续运行（非交互模式）
+		color.Green("Claude Code 已在后台启动!")
+	}
+}
+
+// launchClaudeWithPlatform handles the platform selection and launching of Claude Code
+func launchClaudeWithPlatform(platforms []Platform, platformFlag string, _ string) error {
+	// Use specified platform if provided
+	var selectedPlatform Platform
+	var err error
+	if platformFlag != "" {
+		selectedPlatform, err = findPlatformByName(platforms, platformFlag)
+		if err != nil {
+			return err
+		}
+		color.Green("\n使用平台: %s\n", selectedPlatform.Name)
+	} else {
+		// Display platforms and get user choice with interactive menu
+		selectedPlatform, err = selectPlatformInteractive(platforms)
+		if err != nil {
+			return err
+		}
+		color.Green("\n已选择平台: %s\n", selectedPlatform.Name)
+	}
+
+	// Show platform details before confirmation
+	showPlatformDetails(selectedPlatform)
+
+	// Check if we should skip confirmation
+	if !skipConfirm {
+		// Confirmation loop: prompt user to confirm launch, allow re-selection
+		for {
+			// Confirm before launching
+			if confirmLaunch() {
+				break // User confirmed, proceed with launch
+			}
+
+			color.Yellow("启动已取消。")
+			// Instead of exiting, ask if user wants to select another platform
+			prompt := promptui.Prompt{
+				Label:     "是否选择其他平台",
+				IsConfirm: true,
+				Default:   "y",
+			}
+			result, err := prompt.Run()
+			if err != nil || (result != "" && result != "y" && result != "Y") {
+				return nil // User chose not to select another platform or there was an error
+			}
+
+			// Go back to platform selection
+			selectedPlatform, err = selectPlatformInteractive(platforms)
+			if err != nil {
+				return err
+			}
+			color.Green("\n已选择平台: %s\n", selectedPlatform.Name)
+		}
+	}
+
+	// proceed to set environment and launch
+
+	// Set environment variables
+	setEnvironment(selectedPlatform)
+	color.Green("环境变量设置成功!")
+
+	// Launch Claude Code
+	color.Cyan("正在启动 Claude Code...")
+	
+	// 检测是否在交互式终端中运行
+	isInteractive := term.IsTerminal(int(os.Stdin.Fd()))
+	
+	launchClaudeCode()
+	
+	if !isInteractive {
+		// 在非交互模式下，立即退出，让 claude 在后台继续运行
+		color.Green("cctool 任务完成，已退出。Claude Code 在后台运行中...")
+		os.Exit(0)
+	}
+	
+	return nil
 }
 
 // showInstallationInstructions provides guidance on how to install Claude Code
@@ -526,46 +466,13 @@ func savePlatforms(platforms []Platform, configFilePath string) error {
 		path = getConfigPath()
 	}
 
-	err = os.WriteFile(path, data, 0644)
+	err = os.WriteFile(path, data, 0o644)
 	if err != nil {
 		return fmt.Errorf("写入配置文件失败 %s: %v", path, err)
 	}
 
 	color.Green("配置已保存到: %s", path)
 	return nil
-}
-
-// showHelp displays the help message
-func showHelp() {
-	color.Cyan("Claude Code 平台选择器 v1.1.0")
-	color.Cyan("==============================")
-	fmt.Println("一个用于选择和启动不同平台配置的 Claude Code 工具。")
-	fmt.Println()
-	fmt.Println("用法:")
-	fmt.Println("  cctool [选项]")
-	fmt.Println()
-	color.Yellow("选项:")
-	fmt.Println("  -list          列出所有可用平台")
-	fmt.Println("  -platform name 直接使用指定平台")
-	fmt.Println("  -f path        指定配置文件路径")
-	fmt.Println("  -add           添加新平台")
-	fmt.Println("  -delete name   按名称删除平台")
-	fmt.Println("  -help, -h      显示此帮助信息")
-	fmt.Println("  -version, -v   显示版本信息")
-	fmt.Println()
-	fmt.Println("配置文件格式:")
-	fmt.Println("  {")
-	fmt.Println("    \"platforms\": [")
-	fmt.Println("      {")
-	fmt.Println("        \"name\": \"平台名称\",")
-	fmt.Println("        \"vendor\": \"厂商名称（可选）\",")
-	fmt.Println("        \"ANTHROPIC_BASE_URL\": \"API基础URL\",")
-	fmt.Println("        \"ANTHROPIC_AUTH_TOKEN\": \"认证令牌\",")
-	fmt.Println("        \"ANTHROPIC_MODEL\": \"模型名称\",")
-	fmt.Println("        \"ANTHROPIC_SMALL_FAST_MODEL\": \"快速小模型名称\"")
-	fmt.Println("      }")
-	fmt.Println("    ]")
-	fmt.Println("  }")
 }
 
 // listPlatforms displays all available platforms
@@ -644,4 +551,87 @@ func confirmLaunch() bool {
 	}
 
 	return result == "" || result == "y" || result == "Y"
+}
+
+// maskToken masks sensitive parts of a token for safe display
+func maskToken(token string) string {
+	if len(token) <= 8 {
+		return "****"
+	}
+	return token[:4] + "****" + token[len(token)-4:]
+}
+
+// suggestPlatformNames returns up to 5 platform names similar to query using Levenshtein distance
+func suggestPlatformNames(platforms []Platform, query string) []string {
+	type candidate struct {
+		name string
+		dist int
+	}
+
+	var candidates []candidate
+	for _, p := range platforms {
+		d := levenshteinDistance(p.Name, query)
+		candidates = append(candidates, candidate{name: p.Name, dist: d})
+	}
+
+	// sort by dist ascending
+	for i := 0; i < len(candidates); i++ {
+		for j := i + 1; j < len(candidates); j++ {
+			if candidates[j].dist < candidates[i].dist {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			}
+		}
+	}
+
+	var results []string
+	for i := 0; i < len(candidates) && i < 5; i++ {
+		results = append(results, candidates[i].name)
+	}
+	return results
+}
+
+// levenshteinDistance computes the Levenshtein distance between two strings
+func levenshteinDistance(a, b string) int {
+	la := len(a)
+	lb := len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	dp := make([][]int, la+1)
+	for i := range dp {
+		dp[i] = make([]int, lb+1)
+	}
+
+	for i := 0; i <= la; i++ {
+		dp[i][0] = i
+	}
+	for j := 0; j <= lb; j++ {
+		dp[0][j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		for j := 1; j <= lb; j++ {
+			cost := 0
+			if a[i-1] != b[j-1] {
+				cost = 1
+			}
+			dp[i][j] = min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost)
+		}
+	}
+	return dp[la][lb]
+}
+
+func min(a, b, c int) int {
+	m := a
+	if b < m {
+		m = b
+	}
+	if c < m {
+		m = c
+	}
+	return m
 }

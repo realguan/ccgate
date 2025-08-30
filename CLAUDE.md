@@ -4,229 +4,140 @@
 
 ## 前提
 网络不通的情况下可以尝试使用代理 export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890
+## CLI 使用说明（子命令）
 
-## 项目概述
+cctool 使用 Cobra 子命令组织命令，主要子命令如下：
 
-这是一个基于Go语言的交互式工具，名为"Claude Code平台选择器"(cctool) v1.1.0，允许用户动态选择和启动不同的Claude Code平台接口。该工具管理不同平台的环境变量，并使用适当的配置启动Claude Code应用程序。
+- `list` — 列出所有可用平台
+- `add` — 交互式添加或更新平台配置
+- `delete <name>` — 删除指定名称的平台
+- `version` — 显示版本信息
+- `completion` — 生成 shell 自动补全脚本（`bash` 或 `zsh`）
 
-## 功能特性
+全局 flag:
 
-- 🔄 交互式平台选择界面
-- 📁 多配置文件支持（JSON格式）
-- 🛠️ 命令行参数支持（列表、添加、删除平台等）
-- 🌐 多平台支持（Anthropic、Qwen等）
-- ✅ 配置验证和错误处理
-- 🧪 单元测试覆盖
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）
 
-## 代码架构
+# CLAUDE.md
 
-- **main.go**: 核心应用逻辑，包含以下功能函数：
-  - 从JSON文件加载平台配置
-  - 使用promptui进行交互式平台选择
-  - 根据选定平台设置环境变量
-  - 启动Claude Code应用程序
-  - 配置验证和错误处理
-  - 命令行参数解析
-  
-- **main_test.go**: 单元测试文件，包含平台验证、配置验证和平台查找功能的测试
+概述
 
-- **platforms.json**: 配置文件，包含平台定义：
-  - 平台名称
-  - 厂商信息（可选）
-  - API基础URL
-  - 认证令牌
-  - 模型规格
+此文件说明 cctool 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI）。
 
-- **Makefile**: 构建和开发命令，支持多平台构建
+代码文件概览
 
-- **go.mod/go.sum**: Go模块依赖，主要使用github.com/manifoldco/promptui进行交互式提示
+- `main.go` — 核心实现：配置加载/保存、交互式选择、环境变量映射与启动流程（调用本地 `claude` 可执行文件）。
+- `cli.go` — Cobra 命令注册：提供 `list`, `add`, `delete`, `start`, `version`, `completion` 等子命令，以及全局 `--config/-f` flag。
 
-## 常用开发命令
+命令行接口摘要
 
-### 构建
+# CLAUDE.md
+
+概述
+
+本文件说明 cctool 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI，`start` 子命令已移除，相关 flags 已提升为根命令 flags）。
+
+代码文件概览
+
+- `main.go` — 核心实现：配置加载/保存、交互式选择、环境变量映射与启动流程（调用本地 `claude` 可执行文件）。
+- `cli.go` — Cobra 命令注册：提供 `list`, `add`, `delete`, `version`, `completion` 子命令，以及全局 `--config/-f`、`--platform/-p`、`--yes/-y`、`--dry-run` flags。
+
+命令行接口摘要
+
+全局选项
+
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）。
+
+注：当前版本的 `cctool` 不再包含 `--platform`, `--yes`, `--dry-run` 这类根级 flags（它们在先前的版本中曾短暂存在或被讨论）。根命令（直接运行 `cctool`）仍然是交互式启动的入口；如果需要在脚本或 CI 中自动化启动，请参考下面的迁移/自动化建议。
+
+子命令（常用）
+
+- `list` — 列出所有已配置的平台
+- `add` — 以交互方式添加或更新平台（提示输入字段）
+- `delete <name>` — 删除指定名称的平台
+- `completion <bash|zsh>` — 在 stdout 生成 Shell 自动补全脚本
+- `version` — 输出工具版本信息
+
+重要变化说明与迁移指南
+
+历史上 `cctool` 曾以子命令 `start` 暴露交互/非交互两种启动方式；当前代码库已经简化为：
+
+- 直接运行 `cctool`（根命令）会进入交互式平台选择并执行启动流程。
+- 如果你有自动化/脚本化的需求，请不要依赖已删除的 CLI flags；下面给出两种替代方案：
+
+1) 在脚本中解析配置文件并手动设置环境变量后运行 `claude`：
+
 ```bash
-# 构建项目
-make build
+# 从 ~/.cctool/config.json 中提取名为 myPlatform 的配置并设置环境变量（示例使用 jq）
+cfg=~/.cctool/config.json
+export ANTHROPIC_BASE_URL=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_BASE_URL' "$cfg")
+export ANTHROPIC_AUTH_TOKEN=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_AUTH_TOKEN' "$cfg")
+export ANTHROPIC_MODEL=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_MODEL' "$cfg")
+export ANTHROPIC_SMALL_FAST_MODEL=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_SMALL_FAST_MODEL' "$cfg")
 
-# 安装二进制文件到~/bin
-make install
-
-# 安装二进制文件到GOPATH/bin
-make install-go
-
-# 清理构建产物
-make clean
-
-# 整理Go模块依赖
-make tidy
-
-# 格式化代码
-make fmt
-
-# 检查代码问题
-make vet
-
-# 构建所有平台版本
-make build-all
-
-# 构建特定平台版本
-make build-linux
-make build-mac
-make build-windows
+# 然后运行 claude
+claude
 ```
 
-### 测试
-```bash
-# 运行测试
-make test
+2) 或者，使用 `cctool list` + `cctool add` 在本地生成/修改配置，然后在 CI 中使用自定义脚本（或小工具）读取配置并启动 `claude`。
 
-# 运行测试并查看覆盖率
-make test-cover
+配置文件格式与查找顺序
 
-# 运行特定测试
-go test -v ./... -run TestName
-```
+cctool 支持按下列优先级查找配置文件：
+1. 由 `--config` 指定的路径
+2. 用户目录下的 `~/.cctool/config.json`
+3. 当前目录下的 `platforms.json`
 
-### 开发
-```bash
-# 直接运行应用程序
-go run main.go
+配置内容示例：
 
-# 构建并运行
-make build && ./build/cctool
-
-# 格式化代码
-go fmt ./...
-
-# 检查代码问题
-go vet ./...
-
-# 查看依赖
-go list -m all
-```
-
-### 帮助
-```bash
-# 显示可用的make目标
-make help
-```
-
-## 配置
-
-平台配置存储在JSON文件中，支持以下查找顺序：
-
-1. `~/.cctool/config.json` (用户特定配置)
-2. 当前目录中的`platforms.json`
-3. `/Users/guan/git/cc-repo/ccer/platforms.json` (备用路径)
-
-配置文件结构如下：
 ```json
 {
   "platforms": [
     {
-      "name": "平台名称",
-      "vendor": "厂商名称（可选）",
-      "ANTHROPIC_BASE_URL": "API基础URL",
-      "ANTHROPIC_AUTH_TOKEN": "认证令牌",
-      "ANTHROPIC_MODEL": "模型名称",
-      "ANTHROPIC_SMALL_FAST_MODEL": "快速小模型名称"
+      "name": "default",
+      "vendor": "Anthropic",
+      "ANTHROPIC_BASE_URL": "https://api.anthropic.com",
+      "ANTHROPIC_AUTH_TOKEN": "<REDACTED>",
+      "ANTHROPIC_MODEL": "claude-2",
+      "ANTHROPIC_SMALL_FAST_MODEL": "claude-2.1-small"
     }
   ]
 }
 ```
 
-## 关键组件
+核心流程（简要）
 
-1. **配置层**: 负责从JSON文件加载和解析平台配置，支持多文件位置回退机制
-2. **平台管理**: 支持添加、删除、列出平台配置
-3. **表示层**: 使用promptui创建交互式菜单以从可用平台中选择
-4. **环境管理**: 根据选定的平台配置设置环境变量
-5. **应用启动**: 使用配置的环境变量执行`claude`命令
-6. **验证层**: 对平台配置进行验证，确保必要字段不为空
+1. 程序启动并解析命令行参数（Cobra）。
+2. 根据命令选择操作：列出、添加、删除或启动某个平台。
+3. 启动流程（根命令或通过 `--platform` 指定）：
+   - 如果指定了 `--platform`，程序会尝试做精确匹配；若未找到，会基于 Levenshtein 距离给出相似名称建议。
+   - 如果未指定平台，程序会进入交互式选择（promptui），列出可用平台供用户选择。
+   - 选择平台后，默认会显示确认提示（可用 `--yes` 跳过）。
+   - 如果使用 `--dry-run`，程序仅打印要设置的环境变量（并掩码敏感值），不会执行 `claude`。否则程序会设置环境并尝试执行 `claude` 可执行文件。
 
-## 架构详情
+敏感信息处理
 
-应用程序遵循简单的线性流程：
+程序在打印认证令牌时会掩码中间部分以避免在终端泄露完整令牌；dry-run 输出也遵循同样的掩码策略。
 
-1. **初始化**: 应用程序通过解析命令行参数启动
-2. **配置加载**: 使用`loadPlatforms()`函数从JSON文件加载平台配置，该函数在多个位置搜索
-3. **参数处理**: 根据命令行参数执行相应操作（列表、添加、删除平台等）
-4. **用户交互**: 使用`selectPlatformInteractive()`向用户呈现交互式菜单以选择平台
-5. **环境设置**: 使用`setEnvironment()`将选定的平台配置应用到环境变量
-6. **应用启动**: 使用`launchClaudeCode()`在配置的环境中启动Claude Code应用程序
+实现细节要点
 
-配置加载机制支持多个文件位置以提高灵活性：
-- 用户特定配置位于`~/.cctool/config.json`
-- 本地配置位于`./platforms.json`
-- 备用配置位于固定系统路径
+- 平台条目是任意键值对集合，程序把每个条目的键导出为环境变量名并赋对应值（示例中使用 ANTHROPIC_* 前缀）。
+- `add` 子命令以交互方式提示常见字段（name, vendor, ANTHROPIC_* 等），并将新条目写回配置文件。
+- 平台名称匹配与建议使用简单的 Levenshtein 距离算法，当用户输入近似名称时，工具会输出候选名称供用户参考。
 
-平台选择使用promptui库提供干净的交互式终端界面，用于在可用平台之间选择。
-
-## 命令行参数
-
-cctool支持以下命令行参数：
+开发与测试
 
 ```bash
-cctool [选项]
-
-选项:
-  -list          列出所有可用平台
-  -platform name 直接使用指定平台
-  -f path        指定配置文件路径
-  -add           添加新平台
-  -delete name   按名称删除平台
-  -help, -h      显示帮助信息
-  -version, -v   显示版本信息
+make build
+make test
 ```
 
-### 参数说明
+建议的改进
 
-- `-list`: 显示所有配置的平台列表
-- `-platform <name>`: 直接使用指定名称的平台配置
-- `-f <path>`: 指定配置文件路径
-- `-add`: 交互式添加新平台配置
-- `-delete <name>`: 删除指定名称的平台配置
-- `-help`, `-h`: 显示帮助信息
-- `-version`, `-v`: 显示工具版本信息
+- 在 Makefile 中添加 `completion-install`，自动把生成的补全脚本安装到常见路径。
+- 在 CI 中加入对 `go test ./...` 与 `make build` 的验证。
 
-### 示例用法
+参考
 
-```bash
-# 列出所有平台
-cctool -list
-
-# 直接使用指定平台
-cctool -platform qwen
-
-# 添加新平台
-cctool -add
-
-# 删除平台
-cctool -delete default
-
-# 使用自定义配置文件
-cctool -f /path/to/custom-config.json
-```
-
-## 高级架构
-
-cctool应用程序设计具有清晰的关注点分离：
-
-1. **配置层**: 负责从JSON文件加载和解析平台配置。它实现了一个回退机制，确保应用程序可以在多个位置找到配置文件。
-
-2. **命令行处理层**: 解析和处理命令行参数，执行相应的操作。
-
-3. **平台管理层**: 提供平台的增删改查功能。
-
-4. **表示层**: 使用promptui库创建用于平台选择的交互式命令行界面。这为在不同Claude Code平台配置之间选择提供了用户友好的体验。
-
-5. **环境管理层**: 处理平台配置到环境变量的映射。这种抽象允许应用程序根据用户选择动态配置Claude Code运行时环境。
-
-6. **执行层**: 负责在正确配置的环境变量中启动Claude Code应用程序。这一层确保在启动应用程序时正确应用选定的平台配置。
-
-7. **验证层**: 对平台配置进行验证，确保必要字段不为空。
-
-这些层之间的数据流是单向的：
-配置 → 命令行处理 → 平台管理 → 用户选择 → 环境设置 → 应用程序启动
-
-这种架构使得通过简单地向配置文件添加条目来扩展新平台变得容易，而无需更改代码。同时，通过添加验证层和错误处理，提高了应用程序的健壮性。
+- `README.md`：使用示例与快速入门
+- `main.go`, `cli.go`：实现细节
