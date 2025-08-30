@@ -155,8 +155,6 @@ func selectPlatformInteractive(platforms []Platform) (Platform, error) {
 		names[i] = platform.Name
 	}
 
-
-
 	// Create the prompt
 	prompt := promptui.Select{
 		Label: "选择平台 (Ctrl+C退出)",
@@ -196,10 +194,10 @@ func launchClaudeCode() {
 	// This will launch Claude Code with the exported environment variables
 	cmd := exec.Command("claude")
 	cmd.Env = os.Environ()
-	
+
 	// 检测是否在交互式终端中运行
 	isInteractive := term.IsTerminal(int(os.Stdin.Fd()))
-	
+
 	if isInteractive {
 		// 在交互式终端中，连接 stdin/stdout/stderr
 		cmd.Stdin = os.Stdin
@@ -301,18 +299,18 @@ func launchClaudeWithPlatform(platforms []Platform, platformFlag string, _ strin
 
 	// Launch Claude Code
 	color.Cyan("正在启动 Claude Code...")
-	
+
 	// 检测是否在交互式终端中运行
 	isInteractive := term.IsTerminal(int(os.Stdin.Fd()))
-	
+
 	launchClaudeCode()
-	
+
 	if !isInteractive {
 		// 在非交互模式下，立即退出，让 claude 在后台继续运行
 		color.Green("cctool 任务完成，已退出。Claude Code 在后台运行中...")
 		os.Exit(0)
 	}
-	
+
 	return nil
 }
 

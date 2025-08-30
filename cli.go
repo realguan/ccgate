@@ -8,9 +8,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var cfgFile string
-var platformName string
-var skipConfirm bool
+var (
+	cfgFile      string
+	platformName string
+	skipConfirm  bool
+)
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -38,7 +40,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "f", "", "指定配置文件路径")
 	rootCmd.Flags().StringVarP(&platformName, "platform", "p", "", "指定平台名称")
 	rootCmd.Flags().BoolVarP(&skipConfirm, "yes", "y", false, "跳过确认提示")
-    
+
 	// add subcommands
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(addCmd)
