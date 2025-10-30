@@ -6,7 +6,7 @@
 网络不通的情况下可以尝试使用代理 export https_proxy=http://127.0.0.1:7890 http_proxy=http://127.0.0.1:7890 all_proxy=socks5://127.0.0.1:7890
 ## CLI 使用说明（子命令）
 
-cctool 使用 Cobra 子命令组织命令，主要子命令如下：
+ccgate 使用 Cobra 子命令组织命令，主要子命令如下：
 
 - `list` — 列出所有可用平台
 - `add` — 交互式添加或更新平台配置
@@ -16,13 +16,13 @@ cctool 使用 Cobra 子命令组织命令，主要子命令如下：
 
 全局 flag:
 
-- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.ccgate/config.json`）
 
 # CLAUDE.md
 
 概述
 
-此文件说明 cctool 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI）。
+此文件说明 ccgate 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI）。
 
 代码文件概览
 
@@ -35,7 +35,7 @@ cctool 使用 Cobra 子命令组织命令，主要子命令如下：
 
 概述
 
-本文件说明 cctool 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI，`start` 子命令已移除，相关 flags 已提升为根命令 flags）。
+本文件说明 ccgate 项目的实现细节、配置格式与运行流程，内容已与当前代码保持一致（Cobra 子命令式 CLI，`start` 子命令已移除，相关 flags 已提升为根命令 flags）。
 
 代码文件概览
 
@@ -46,9 +46,9 @@ cctool 使用 Cobra 子命令组织命令，主要子命令如下：
 
 全局选项
 
-- `--config, -f <path>`: 指定配置文件路径（默认 `~/.cctool/config.json`）。
+- `--config, -f <path>`: 指定配置文件路径（默认 `~/.ccgate/config.json`）。
 
-注：当前版本的 `cctool` 不再包含 `--platform`, `--yes`, `--dry-run` 这类根级 flags（它们在先前的版本中曾短暂存在或被讨论）。根命令（直接运行 `cctool`）仍然是交互式启动的入口；如果需要在脚本或 CI 中自动化启动，请参考下面的迁移/自动化建议。
+注：当前版本的 `ccgate` 不再包含 `--platform`, `--yes`, `--dry-run` 这类根级 flags（它们在先前的版本中曾短暂存在或被讨论）。根命令（直接运行 `ccgate`）仍然是交互式启动的入口；如果需要在脚本或 CI 中自动化启动，请参考下面的迁移/自动化建议。
 
 子命令（常用）
 
@@ -60,16 +60,16 @@ cctool 使用 Cobra 子命令组织命令，主要子命令如下：
 
 重要变化说明与迁移指南
 
-历史上 `cctool` 曾以子命令 `start` 暴露交互/非交互两种启动方式；当前代码库已经简化为：
+历史上 `ccgate` 曾以子命令 `start` 暴露交互/非交互两种启动方式；当前代码库已经简化为：
 
-- 直接运行 `cctool`（根命令）会进入交互式平台选择并执行启动流程。
+- 直接运行 `ccgate`（根命令）会进入交互式平台选择并执行启动流程。
 - 如果你有自动化/脚本化的需求，请不要依赖已删除的 CLI flags；下面给出两种替代方案：
 
 1) 在脚本中解析配置文件并手动设置环境变量后运行 `claude`：
 
 ```bash
-# 从 ~/.cctool/config.json 中提取名为 myPlatform 的配置并设置环境变量（示例使用 jq）
-cfg=~/.cctool/config.json
+# 从 ~/.ccgate/config.json 中提取名为 myPlatform 的配置并设置环境变量（示例使用 jq）
+cfg=~/.ccgate/config.json
 export ANTHROPIC_BASE_URL=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_BASE_URL' "$cfg")
 export ANTHROPIC_AUTH_TOKEN=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_AUTH_TOKEN' "$cfg")
 export ANTHROPIC_MODEL=$(jq -r '.platforms[] | select(.name=="myPlatform") .ANTHROPIC_MODEL' "$cfg")
@@ -79,13 +79,13 @@ export ANTHROPIC_SMALL_FAST_MODEL=$(jq -r '.platforms[] | select(.name=="myPlatf
 claude
 ```
 
-2) 或者，使用 `cctool list` + `cctool add` 在本地生成/修改配置，然后在 CI 中使用自定义脚本（或小工具）读取配置并启动 `claude`。
+2) 或者，使用 `ccgate list` + `ccgate add` 在本地生成/修改配置，然后在 CI 中使用自定义脚本（或小工具）读取配置并启动 `claude`。
 
 配置文件格式与查找顺序
 
-cctool 支持按下列优先级查找配置文件：
+ccgate 支持按下列优先级查找配置文件：
 1. 由 `--config` 指定的路径
-2. 用户目录下的 `~/.cctool/config.json`
+2. 用户目录下的 `~/.ccgate/config.json`
 3. 当前目录下的 `platforms.json`
 
 配置内容示例：

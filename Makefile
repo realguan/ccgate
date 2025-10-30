@@ -1,7 +1,7 @@
-# Makefile for cctool
+# Makefile for ccgate
 
 # Binary name
-BINARY=cctool
+BINARY=ccgate
 
 # Directories
 SRC_DIR=.
