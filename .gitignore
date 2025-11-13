@@ -1,3 +1,7 @@
 ccgate
 ccgate_health_check.sh
 build
+.claude
+openspec
+CLAUDE.md
+AGENTS.md

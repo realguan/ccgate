@@ -81,14 +81,19 @@ func handleRootCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// 选择平台（-p 指定 或 交互式）
-	platform, err := selectPlatform(config, platformName, claudeArgs)
+	// 多平台交互式选择时内部会处理确认循环（支持 ESC 返回）
+	// 其他情况（-p 指定或单平台）在外部确认
+	platform, err := selectPlatform(config, platformName, claudeArgs, skipConfirm)
 	if err != nil {
 		return err
 	}
 
-	// 确认执行（除非 --yes）
-	if err := confirmExecution(platform, claudeArgs, skipConfirm); err != nil {
-		return err
+	// 当使用 -p 指定平台 或 单平台自动选择时，需要确认（除非 --yes）
+	// 交互式多平台选择时内部已经处理了确认
+	if platformName != "" || len(config.Platforms) == 1 {
+		if err := confirmExecution(platform, claudeArgs, skipConfirm); err != nil {
+			return err
+		}
 	}
 
 	// 透明代理到 claude

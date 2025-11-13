@@ -5,14 +5,17 @@ import (
 	"os"
 	"strings"
 
+	"atomicgo.dev/keyboard"
+	"atomicgo.dev/keyboard/keys"
 	"github.com/fatih/color"
-	"github.com/manifoldco/promptui"
+	"github.com/pterm/pterm"
 	"golang.org/x/term"
 )
 
 // selectPlatform 选择平台（自动或交互式）
 // claudeArgs 用于判断是否需要显示提示信息
-func selectPlatform(config *Config, platformName string, claudeArgs []string) (*Platform, error) {
+// skipConfirm 是否跳过确认（用于 --yes 参数）
+func selectPlatform(config *Config, platformName string, claudeArgs []string, skipConfirm bool) (*Platform, error) {
 	if len(config.Platforms) == 0 {
 		return nil, fmt.Errorf("没有配置任何平台\n请先运行 'ccgate add' 添加平台")
 	}
@@ -50,102 +53,193 @@ func selectPlatform(config *Config, platformName string, claudeArgs []string) (*
 		return nil, formatNonInteractiveError(config.Platforms, claudeArgs)
 	}
 
+	// 循环选择，支持 ESC 返回重新选择
+	for {
+		// 交互式选择（提示信息在函数内部显示）
+		platform, err := interactiveSelectPlatform(config.Platforms, claudeArgs)
+		if err != nil {
+			return nil, err
+		}
+
+		// 跳过确认（--yes 参数）
+		if skipConfirm {
+			return platform, nil
+		}
+
+		// 确认执行，如果取消则返回重新选择
+		err = confirmExecution(platform, claudeArgs, skipConfirm)
+		if err != nil {
+			// 用户取消确认，清屏后重新选择
+			fmt.Print("\033[H\033[2J")
+			pterm.Warning.Println("已取消，重新选择平台")
+			fmt.Println()
+			continue
+		}
+
+		// 确认通过，返回选中的平台
+		return platform, nil
+	}
+}
+
+// interactiveSelectPlatform 交互式选择平台
+func interactiveSelectPlatform(platforms []Platform, claudeArgs []string) (*Platform, error) {
 	// 显示提示信息
 	if len(claudeArgs) > 0 {
-		color.Yellow("\n→ 检测到 claude 命令参数: %s", strings.Join(claudeArgs, " "))
-		fmt.Println()
+		pterm.Warning.Printf("检测到 claude 命令参数: %s\n\n", strings.Join(claudeArgs, " "))
 	}
 
-	// 交互式选择
-	platform, err := interactiveSelectPlatform(config.Platforms)
-	if err != nil {
-		return nil, err
+	// 构建选项列表（包含详细信息）
+	options := make([]string, len(platforms))
+	optionDetails := make([]string, len(platforms))
+
+	for i, p := range platforms {
+		// 主显示：平台名称和厂商
+		if p.Vendor != "" {
+			options[i] = fmt.Sprintf("%s (%s)", p.Name, p.Vendor)
+		} else {
+			options[i] = p.Name
+		}
+
+		// 详细信息（用于搜索和显示）
+		optionDetails[i] = fmt.Sprintf("%s %s %s %s",
+			p.Name,
+			p.Vendor,
+			p.AnthropicBaseURL,
+			p.AnthropicModel,
+		)
 	}
+
+	// 创建交互式选择器
+	selectedOption, err := pterm.DefaultInteractiveSelect.
+		WithOptions(options).
+		WithDefaultText("选择平台 (↑↓ 导航, / 搜索, Enter 确认)").
+		WithFilter(true).  // 启用模糊搜索
+		WithMaxHeight(15). // 最大显示高度
+		Show()
+
+	if err != nil {
+		// 用户取消选择 (Ctrl+C)
+		pterm.Warning.Println("\n平台选择已取消")
+		os.Exit(0)
+	}
+
+	// 找到选中的平台索引
+	selectedIndex := -1
+	for i, opt := range options {
+		if opt == selectedOption {
+			selectedIndex = i
+			break
+		}
+	}
+
+	if selectedIndex == -1 {
+		return nil, fmt.Errorf("未找到选中的平台")
+	}
+
+	platform := &platforms[selectedIndex]
+
+	// 显示选中平台的详细信息
+	fmt.Println()
+	pterm.DefaultSection.Println("平台详情")
+
+	// 构建详情表格
+	tableData := pterm.TableData{
+		{"名称", platform.Name},
+		{"厂商", platform.Vendor},
+		{"Base URL", platform.AnthropicBaseURL},
+		{"模型", platform.AnthropicModel},
+	}
+
+	if platform.AnthropicSmallModel != "" {
+		tableData = append(tableData, []string{"快速模型", platform.AnthropicSmallModel})
+	}
+
+	// 渲染表格
+	pterm.DefaultTable.WithHasHeader(false).
+		WithBoxed(true).
+		WithData(tableData).
+		Render()
+
+	fmt.Println()
 
 	return platform, nil
 }
 
-// interactiveSelectPlatform 交互式选择平台
-func interactiveSelectPlatform(platforms []Platform) (*Platform, error) {
-	// 构建选择模板
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}",
-		Active:   "▸ {{ .Name | cyan }} {{ if .Vendor }}({{ .Vendor | faint }}){{ end }}",
-		Inactive: "  {{ .Name }} {{ if .Vendor }}({{ .Vendor | faint }}){{ end }}",
-		Selected: color.GreenString("→ 已选择: {{ .Name }}"),
-		Details: `
---------- 平台详情 ---------
-{{ "名称:" | faint }}	{{ .Name }}
-{{ "厂商:" | faint }}	{{ .Vendor }}
-{{ "Base URL:" | faint }}	{{ .ANTHROPIC_BASE_URL }}
-{{ "模型:" | faint }}	{{ .ANTHROPIC_MODEL }}`,
-	}
-
-	// 创建选择器
-	prompt := promptui.Select{
-		Label:     "选择平台",
-		Items:     platforms,
-		Templates: templates,
-		Size:      10,
-		// 支持搜索
-		Searcher: func(input string, index int) bool {
-			platform := platforms[index]
-			name := strings.ToLower(platform.Name)
-			input = strings.ToLower(input)
-			return strings.Contains(name, input)
-		},
-	}
-
-	idx, _, err := prompt.Run()
-	if err != nil {
-		// 用户取消选择
-		if err == promptui.ErrInterrupt || err == promptui.ErrEOF || err == promptui.ErrAbort {
-			color.Yellow("\n平台选择已取消")
-			os.Exit(0)
-		}
-		return nil, fmt.Errorf("平台选择失败: %w", err)
-	}
-
-	return &platforms[idx], nil
-}
-
-// confirmExecution 确认执行
+// confirmExecution 确认执行，支持 ESC 键直接返回
 func confirmExecution(platform *Platform, claudeArgs []string, skipConfirm bool) error {
 	if skipConfirm {
 		return nil
 	}
 
-	fmt.Println()
-	color.Green("→ 将使用平台: %s", platform.Name)
-	if platform.Vendor != "" {
-		color.Cyan("  厂商: %s", platform.Vendor)
-	}
-	color.Cyan("  Base URL: %s", platform.AnthropicBaseURL)
-	color.Cyan("  模型: %s", platform.AnthropicModel)
-	color.Yellow("  认证令牌: %s", maskToken(platform.AnthropicAuthToken))
-
+	// 显示执行命令
 	if len(claudeArgs) > 0 {
-		color.Magenta("\n→ 执行命令: claude %s", strings.Join(claudeArgs, " "))
+		pterm.Info.Printf("执行命令: %s\n\n", pterm.LightMagenta("claude "+strings.Join(claudeArgs, " ")))
 	} else {
-		color.Magenta("\n→ 执行命令: claude (交互式)")
+		pterm.Info.Printf("执行命令: %s\n\n", pterm.LightMagenta("claude (交互式)"))
 	}
 
-	fmt.Println()
+	// 显示提示
+	fmt.Printf("确认执行? [Y/n] (ESC 返回): ")
 
-	prompt := promptui.Prompt{
-		Label:     "确认执行",
-		IsConfirm: true,
-		Default:   "Y",
-	}
+	// 使用 keyboard 库监听按键
+	confirmed := false
+	cancelled := false
 
-	result, err := prompt.Run()
+	err := keyboard.Listen(func(key keys.Key) (stop bool, err error) {
+		switch key.Code {
+		case keys.Enter:
+			// Enter 键 - 确认
+			confirmed = true
+			fmt.Println("Y")
+			return true, nil
+
+		case keys.RuneKey:
+			// 字符键
+			if len(key.Runes) > 0 {
+				char := string(key.Runes)
+				switch char {
+				case "y", "Y":
+					// Y 键 - 确认
+					confirmed = true
+					fmt.Println(char)
+					return true, nil
+				case "n", "N":
+					// N 键 - 取消
+					cancelled = true
+					fmt.Println(char)
+					return true, nil
+				}
+			}
+
+		case keys.Escape:
+			// ESC 键 - 取消
+			cancelled = true
+			fmt.Println("ESC")
+			return true, nil
+
+		case keys.CtrlC:
+			// Ctrl+C - 退出程序
+			fmt.Println()
+			pterm.Warning.Println("操作已取消")
+			os.Exit(0)
+		}
+
+		// 忽略其他按键，继续监听
+		return false, nil
+	})
+
 	if err != nil {
+		return fmt.Errorf("键盘监听失败: %w", err)
+	}
+
+	// 根据用户选择返回结果
+	if cancelled {
 		return fmt.Errorf("操作已取消")
 	}
 
-	// 只接受 Y/y/回车
-	if result != "" && result != "y" && result != "Y" {
-		return fmt.Errorf("操作已取消")
+	if !confirmed {
+		// 理论上不会到这里，因为 Listen 会一直等待直到 stop=true
+		return fmt.Errorf("未确认执行")
 	}
 
 	return nil
