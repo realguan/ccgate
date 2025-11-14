@@ -2,136 +2,177 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/fatih/color"
-	"github.com/manifoldco/promptui"
+	"github.com/pterm/pterm"
 )
 
 // listPlatforms 列出所有平台
 func listPlatforms(platforms []Platform) {
+	theme := DefaultTheme()
+
 	if len(platforms) == 0 {
-		color.Yellow("没有配置任何平台")
+		DisplayWarning("没有配置任何平台", theme)
 		fmt.Println("使用 'ccgate add' 命令添加新平台")
 		return
 	}
 
-	color.Cyan("\n可用平台 (%d):", len(platforms))
-	color.Cyan("========================")
+	// 显示标题，使用主题主色
+	title := fmt.Sprintf("可用平台 (%d)", len(platforms))
+	pterm.Info.Printf("%s\n", theme.Colors.Primary.Sprint(title))
+	pterm.Info.Printf("%s\n", theme.Colors.Secondary.Sprint(strings.Repeat("=", len(title))))
+
 	for i, platform := range platforms {
-		color.Green("\n%d. %s", i+1, platform.Name)
+		Spacer(theme.Spacing.SM, theme)
+
+		// 平台编号和名称
+		pterm.Printf("%s %s\n",
+			theme.Colors.Success.Sprint(fmt.Sprintf("%d.", i+1)),
+			theme.Colors.Primary.Sprint(platform.Name))
+
+		// 平台详情
 		if platform.Vendor != "" {
-			fmt.Printf("   厂商: %s\n", platform.Vendor)
+			pterm.Printf("   %s %s\n",
+				theme.Colors.Secondary.Sprint("厂商:"),
+				platform.Vendor)
 		}
-		fmt.Printf("   API: %s\n", platform.AnthropicBaseURL)
-		fmt.Printf("   模型: %s\n", platform.AnthropicModel)
+		pterm.Printf("   %s %s\n",
+			theme.Colors.Secondary.Sprint("API:"),
+			platform.AnthropicBaseURL)
+		pterm.Printf("   %s %s\n",
+			theme.Colors.Secondary.Sprint("模型:"),
+			platform.AnthropicModel)
 		if platform.AnthropicSmallModel != "" {
-			fmt.Printf("   快速模型: %s\n", platform.AnthropicSmallModel)
+			pterm.Printf("   %s %s\n",
+				theme.Colors.Secondary.Sprint("快速模型:"),
+				theme.Colors.Info.Sprint(platform.AnthropicSmallModel))
 		}
 	}
-	fmt.Println()
+
+	Spacer(theme.Spacing.MD, theme)
 }
 
 // addPlatform 交互式添加或更新平台
 func addPlatform() (Platform, error) {
 	var platform Platform
+	theme := DefaultTheme()
 
-	color.Cyan("\n添加新的平台配置")
-	color.Cyan("==================\n")
+	// 显示标题
+	pterm.Info.Printf("%s\n", theme.Colors.Primary.Sprint("🚀 添加新的平台配置"))
+	pterm.Info.Printf("%s\n\n", theme.Colors.Secondary.Sprint(strings.Repeat("=", 20)))
 
 	// 平台名称
-	namePrompt := promptui.Prompt{
-		Label: "平台名称",
-		Validate: func(input string) error {
-			if input == "" {
-				return fmt.Errorf("平台名称不能为空")
-			}
-			return nil
-		},
+	pterm.Printf("%s\n", theme.Colors.Primary.Sprint("📝 平台名称"))
+	for {
+		name, err := pterm.DefaultInteractiveTextInput.
+			WithDefaultText("请输入平台名称（如：production, staging, development）").
+			Show()
+		if err != nil {
+			return platform, fmt.Errorf("获取平台名称失败: %w", err)
+		}
+
+		// 验证
+		if strings.TrimSpace(name) == "" {
+			err := NewValidationError("平台名称不能为空", "请输入一个有效的平台名称")
+			err.DisplayError(theme)
+			continue
+		}
+
+		platform.Name = strings.TrimSpace(name)
+		break
 	}
-	name, err := namePrompt.Run()
-	if err != nil {
-		return platform, fmt.Errorf("获取平台名称失败: %w", err)
-	}
-	platform.Name = name
 
 	// 厂商（可选）
-	vendorPrompt := promptui.Prompt{
-		Label: "厂商 (可选)",
-	}
-	vendor, err := vendorPrompt.Run()
+	pterm.Printf("\n%s\n", theme.Colors.Secondary.Sprint("🏢 厂商（可选）"))
+	vendor, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("请输入厂商名称（如：Anthropic, OpenAI, 第三方代理商）").
+		Show()
 	if err != nil {
 		return platform, fmt.Errorf("获取厂商信息失败: %w", err)
 	}
-	platform.Vendor = vendor
+	platform.Vendor = strings.TrimSpace(vendor)
 
 	// API URL
-	urlPrompt := promptui.Prompt{
-		Label: "ANTHROPIC_BASE_URL",
-		Validate: func(input string) error {
-			if input == "" {
-				return fmt.Errorf("API URL 不能为空")
-			}
-			return nil
-		},
-		Default: "https://api.anthropic.com",
+	pterm.Printf("\n%s\n", theme.Colors.Primary.Sprint("🔗 ANTHROPIC_BASE_URL"))
+	for {
+		url, err := pterm.DefaultInteractiveTextInput.
+			WithDefaultText("请输入 API Base URL（如：https://api.anthropic.com）").
+			Show()
+		if err != nil {
+			return platform, fmt.Errorf("获取 API URL 失败: %w", err)
+		}
+
+		// 验证
+		if strings.TrimSpace(url) == "" {
+			err := NewValidationError("API URL 不能为空", "请输入有效的 API URL")
+			err.DisplayError(theme)
+			continue
+		}
+
+		platform.AnthropicBaseURL = strings.TrimSpace(url)
+		break
 	}
-	url, err := urlPrompt.Run()
-	if err != nil {
-		return platform, fmt.Errorf("获取 API URL 失败: %w", err)
-	}
-	platform.AnthropicBaseURL = url
 
 	// 认证令牌
-	tokenPrompt := promptui.Prompt{
-		Label: "ANTHROPIC_AUTH_TOKEN",
-		Mask:  '*',
-		Validate: func(input string) error {
-			if input == "" {
-				return fmt.Errorf("认证令牌不能为空")
-			}
-			return nil
-		},
+	pterm.Printf("\n%s\n", theme.Colors.Primary.Sprint("🔑 ANTHROPIC_AUTH_TOKEN"))
+	for {
+		token, err := pterm.DefaultInteractiveTextInput.
+			WithDefaultText("请输入认证令牌（API Key）").
+			Show()
+		if err != nil {
+			return platform, fmt.Errorf("获取认证令牌失败: %w", err)
+		}
+
+		// 验证
+		if strings.TrimSpace(token) == "" {
+			err := NewValidationError("认证令牌不能为空", "请输入有效的认证令牌")
+			err.DisplayError(theme)
+			continue
+		}
+
+		platform.AnthropicAuthToken = strings.TrimSpace(token)
+		break
 	}
-	token, err := tokenPrompt.Run()
-	if err != nil {
-		return platform, fmt.Errorf("获取认证令牌失败: %w", err)
-	}
-	platform.AnthropicAuthToken = token
 
 	// 模型
-	modelPrompt := promptui.Prompt{
-		Label: "ANTHROPIC_MODEL",
-		Validate: func(input string) error {
-			if input == "" {
-				return fmt.Errorf("模型不能为空")
-			}
-			return nil
-		},
-		Default: "claude-sonnet-4-20250514",
+	pterm.Printf("\n%s\n", theme.Colors.Primary.Sprint("🤖 ANTHROPIC_MODEL"))
+	for {
+		model, err := pterm.DefaultInteractiveTextInput.
+			WithDefaultText("请输入模型名称（如：claude-sonnet-4-20250514）").
+			Show()
+		if err != nil {
+			return platform, fmt.Errorf("获取模型失败: %w", err)
+		}
+
+		// 验证
+		if strings.TrimSpace(model) == "" {
+			err := NewValidationError("模型不能为空", "请输入有效的模型名称")
+			err.DisplayError(theme)
+			continue
+		}
+
+		platform.AnthropicModel = strings.TrimSpace(model)
+		break
 	}
-	model, err := modelPrompt.Run()
-	if err != nil {
-		return platform, fmt.Errorf("获取模型失败: %w", err)
-	}
-	platform.AnthropicModel = model
 
 	// 快速模型（可选）
-	fastModelPrompt := promptui.Prompt{
-		Label:   "ANTHROPIC_SMALL_FAST_MODEL (可选)",
-		Default: "claude-3-5-haiku-20241022",
-	}
-	fastModel, err := fastModelPrompt.Run()
+	pterm.Printf("\n%s\n", theme.Colors.Secondary.Sprint("⚡ ANTHROPIC_SMALL_FAST_MODEL（可选）"))
+	fastModel, err := pterm.DefaultInteractiveTextInput.
+		WithDefaultText("请输入快速模型名称（如：claude-3-5-haiku-20241022，回车跳过）").
+		Show()
 	if err != nil {
 		return platform, fmt.Errorf("获取快速模型失败: %w", err)
 	}
-	platform.AnthropicSmallModel = fastModel
+	platform.AnthropicSmallModel = strings.TrimSpace(fastModel)
+
+	Spacer(theme.Spacing.MD, theme)
 
 	// 验证配置
 	if err := platform.Validate(); err != nil {
 		return platform, fmt.Errorf("平台配置验证失败: %w", err)
 	}
 
-	color.Green("\n✓ 平台配置验证通过")
+	DisplaySuccess("✓ 平台配置验证通过", theme)
 	return platform, nil
 }
 

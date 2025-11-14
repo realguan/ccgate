@@ -7,7 +7,6 @@ import (
 
 	"atomicgo.dev/keyboard"
 	"atomicgo.dev/keyboard/keys"
-	"github.com/fatih/color"
 	"github.com/pterm/pterm"
 	"golang.org/x/term"
 )
@@ -17,7 +16,10 @@ import (
 // skipConfirm 是否跳过确认（用于 --yes 参数）
 func selectPlatform(config *Config, platformName string, claudeArgs []string, skipConfirm bool) (*Platform, error) {
 	if len(config.Platforms) == 0 {
-		return nil, fmt.Errorf("没有配置任何平台\n请先运行 'ccgate add' 添加平台")
+		theme := DefaultTheme()
+		err := NewUserError("没有配置任何平台", "请先运行 'ccgate add' 添加平台")
+		err.DisplayError(theme)
+		return nil, fmt.Errorf("没有配置任何平台")
 	}
 
 	// 情况1: 通过 -p/--platform 显式指定
@@ -42,7 +44,9 @@ func selectPlatform(config *Config, platformName string, claudeArgs []string, sk
 	if len(config.Platforms) == 1 {
 		platform := &config.Platforms[0]
 		if len(claudeArgs) > 0 {
-			color.Cyan("→ 检测到唯一平台: %s，自动使用", platform.Name)
+			theme := DefaultTheme()
+			msg := fmt.Sprintf("检测到唯一平台: %s，自动使用", platform.Name)
+			DisplayInfo(msg, theme)
 		}
 		return platform, nil
 	}
@@ -71,8 +75,10 @@ func selectPlatform(config *Config, platformName string, claudeArgs []string, sk
 		if err != nil {
 			// 用户取消确认，清屏后重新选择
 			fmt.Print("\033[H\033[2J")
-			pterm.Warning.Println("已取消，重新选择平台")
-			fmt.Println()
+			theme := DefaultTheme()
+			Spacer(theme.Spacing.SM, theme)
+			DisplayWarning("已取消，重新选择平台", theme)
+			Spacer(theme.Spacing.SM, theme)
 			continue
 		}
 
@@ -83,9 +89,13 @@ func selectPlatform(config *Config, platformName string, claudeArgs []string, sk
 
 // interactiveSelectPlatform 交互式选择平台
 func interactiveSelectPlatform(platforms []Platform, claudeArgs []string) (*Platform, error) {
+	theme := DefaultTheme()
+	layout := GetResponsiveLayout()
+
 	// 显示提示信息
 	if len(claudeArgs) > 0 {
-		pterm.Warning.Printf("检测到 claude 命令参数: %s\n\n", strings.Join(claudeArgs, " "))
+		DisplayWarning(fmt.Sprintf("检测到 claude 命令参数: %s", strings.Join(claudeArgs, " ")), theme)
+		Spacer(theme.Spacing.SM, theme)
 	}
 
 	// 构建选项列表（包含详细信息）
@@ -93,12 +103,16 @@ func interactiveSelectPlatform(platforms []Platform, claudeArgs []string) (*Plat
 	optionDetails := make([]string, len(platforms))
 
 	for i, p := range platforms {
-		// 主显示：平台名称和厂商
+		// 主显示：平台名称和厂商，使用主题色彩
+		var optionText string
 		if p.Vendor != "" {
-			options[i] = fmt.Sprintf("%s (%s)", p.Name, p.Vendor)
+			optionText = fmt.Sprintf("%s (%s)",
+				theme.Colors.Primary.Sprint(p.Name),
+				theme.Colors.Secondary.Sprint(p.Vendor))
 		} else {
-			options[i] = p.Name
+			optionText = theme.Colors.Primary.Sprint(p.Name)
 		}
+		options[i] = optionText
 
 		// 详细信息（用于搜索和显示）
 		optionDetails[i] = fmt.Sprintf("%s %s %s %s",
@@ -109,17 +123,28 @@ func interactiveSelectPlatform(platforms []Platform, claudeArgs []string) (*Plat
 		)
 	}
 
-	// 创建交互式选择器
-	selectedOption, err := pterm.DefaultInteractiveSelect.
+	// 显示选择器标题，使用主题主色
+	title := theme.Colors.Primary.Sprint("🚀 选择 Claude Code API供应商")
+	pterm.Info.Println(title)
+
+	// 创建交互式选择器，配置现代化的选项
+	selector := pterm.DefaultInteractiveSelect.
 		WithOptions(options).
-		WithDefaultText("选择平台 (↑↓ 导航, / 搜索, Enter 确认)").
-		WithFilter(true).  // 启用模糊搜索
-		WithMaxHeight(15). // 最大显示高度
-		Show()
+		WithDefaultText("选择平台 (↑↓ 导航, 直接输入搜索, Enter 确认)").
+		WithFilter(true). // 启用模糊搜索
+		WithMaxHeight(15)
+
+	// 根据响应式布局调整
+	if layout.CompactMode {
+		selector = selector.WithMaxHeight(10)
+	}
+
+	selectedOption, err := selector.Show()
 
 	if err != nil {
 		// 用户取消选择 (Ctrl+C)
-		pterm.Warning.Println("\n平台选择已取消")
+		theme := DefaultTheme()
+		DisplayWarning("平台选择已取消", theme)
 		os.Exit(0)
 	}
 
@@ -139,28 +164,31 @@ func interactiveSelectPlatform(platforms []Platform, claudeArgs []string) (*Plat
 	platform := &platforms[selectedIndex]
 
 	// 显示选中平台的详细信息
-	fmt.Println()
-	pterm.DefaultSection.Println("平台详情")
+	Spacer(theme.Spacing.MD, theme)
+
+	// 使用主题色彩显示详情标题
+	detailsTitle := theme.Colors.Secondary.Sprint("📋 平台详情")
+	pterm.DefaultSection.Println(detailsTitle)
 
 	// 构建详情表格
 	tableData := pterm.TableData{
-		{"名称", platform.Name},
+		{"名称", theme.Colors.Primary.Sprint(platform.Name)},
 		{"厂商", platform.Vendor},
 		{"Base URL", platform.AnthropicBaseURL},
 		{"模型", platform.AnthropicModel},
 	}
 
 	if platform.AnthropicSmallModel != "" {
-		tableData = append(tableData, []string{"快速模型", platform.AnthropicSmallModel})
+		tableData = append(tableData, []string{"快速模型", theme.Colors.Info.Sprint(platform.AnthropicSmallModel)})
 	}
 
-	// 渲染表格
+	// 渲染表格，应用主题
 	pterm.DefaultTable.WithHasHeader(false).
 		WithBoxed(true).
 		WithData(tableData).
 		Render()
 
-	fmt.Println()
+	Spacer(theme.Spacing.SM, theme)
 
 	return platform, nil
 }
@@ -171,15 +199,37 @@ func confirmExecution(platform *Platform, claudeArgs []string, skipConfirm bool)
 		return nil
 	}
 
-	// 显示执行命令
+	theme := DefaultTheme()
+
+	// 显示执行命令，使用主题色彩
 	if len(claudeArgs) > 0 {
-		pterm.Info.Printf("执行命令: %s\n\n", pterm.LightMagenta("claude "+strings.Join(claudeArgs, " ")))
+		cmdText := fmt.Sprintf("claude %s", strings.Join(claudeArgs, " "))
+		pterm.Info.Printf("执行命令: %s\n\n", theme.Colors.Info.Sprint(cmdText))
 	} else {
-		pterm.Info.Printf("执行命令: %s\n\n", pterm.LightMagenta("claude (交互式)"))
+		pterm.Info.Printf("执行命令: %s\n\n", theme.Colors.Info.Sprint("claude (交互式)"))
 	}
 
-	// 显示提示
-	fmt.Printf("确认执行? [Y/n] (ESC 返回): ")
+	// 显示现代化的确认提示
+	pterm.Printf("%s ", theme.Colors.Primary.Sprint("🚀 准备启动"))
+	pterm.Printf("%s", theme.Colors.Secondary.Sprint(platform.Name))
+
+	if len(claudeArgs) > 0 {
+		pterm.Printf("%s", theme.Colors.Info.Sprint(" 执行命令"))
+	} else {
+		pterm.Printf("%s", theme.Colors.Info.Sprint(" 交互模式"))
+	}
+	fmt.Println()
+
+	Spacer(theme.Spacing.SM, theme)
+
+	// 显示确认提示，使用主题色彩
+	confirmText := theme.Colors.Primary.Sprint("确认执行?")
+	yesText := theme.Colors.Success.Sprint("[Y]")
+	noText := theme.Colors.Error.Sprint("[n]")
+	escText := theme.Colors.Warning.Sprint("(ESC 返回)")
+
+	pterm.Printf("%s %s %s %s\n", confirmText, yesText, noText, escText)
+	pterm.Printf("%s ", theme.Colors.Muted.Sprint("→ 按 Enter 或 Y 确认，N 或 ESC 取消"))
 
 	// 使用 keyboard 库监听按键
 	confirmed := false
@@ -190,7 +240,8 @@ func confirmExecution(platform *Platform, claudeArgs []string, skipConfirm bool)
 		case keys.Enter:
 			// Enter 键 - 确认
 			confirmed = true
-			fmt.Println("Y")
+			fmt.Println()
+			DisplaySuccess("确认执行", theme)
 			return true, nil
 
 		case keys.RuneKey:
@@ -201,12 +252,14 @@ func confirmExecution(platform *Platform, claudeArgs []string, skipConfirm bool)
 				case "y", "Y":
 					// Y 键 - 确认
 					confirmed = true
-					fmt.Println(char)
+					fmt.Println()
+					DisplaySuccess("确认执行", theme)
 					return true, nil
 				case "n", "N":
 					// N 键 - 取消
 					cancelled = true
-					fmt.Println(char)
+					fmt.Println()
+					DisplayWarning("操作已取消", theme)
 					return true, nil
 				}
 			}
@@ -214,13 +267,14 @@ func confirmExecution(platform *Platform, claudeArgs []string, skipConfirm bool)
 		case keys.Escape:
 			// ESC 键 - 取消
 			cancelled = true
-			fmt.Println("ESC")
+			fmt.Println()
+			DisplayWarning("操作已取消，返回选择", theme)
 			return true, nil
 
 		case keys.CtrlC:
 			// Ctrl+C - 退出程序
 			fmt.Println()
-			pterm.Warning.Println("操作已取消")
+			DisplayWarning("操作已取消", theme)
 			os.Exit(0)
 		}
 

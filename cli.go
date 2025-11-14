@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
-	"github.com/fatih/color"
+	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
 )
 
@@ -80,7 +81,8 @@ func handleRootCommand(cmd *cobra.Command, args []string) error {
 
 	// 验证配置
 	if len(config.Platforms) == 0 {
-		color.Yellow("没有配置任何平台")
+		theme := DefaultTheme()
+		DisplayWarning("没有配置任何平台", theme)
 		fmt.Println("请先运行 'ccgate add' 添加平台")
 		return nil
 	}
@@ -205,12 +207,13 @@ var addCmd = &cobra.Command{
 			}
 		}
 
+		theme := DefaultTheme()
 		if existingIndex != -1 {
 			config.Platforms[existingIndex] = newPlatform
-			color.Yellow("平台 '%s' 已存在，已更新配置", newPlatform.Name)
+			DisplayWarning(fmt.Sprintf("平台 '%s' 已存在，已更新配置", newPlatform.Name), theme)
 		} else {
 			config.Platforms = append(config.Platforms, newPlatform)
-			color.Green("平台 '%s' 添加成功", newPlatform.Name)
+			DisplaySuccess(fmt.Sprintf("平台 '%s' 添加成功", newPlatform.Name), theme)
 		}
 
 		return saveConfig(config, cfgFile)
@@ -239,7 +242,8 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		color.Green("✓ 平台 '%s' 删除成功", name)
+		theme := DefaultTheme()
+		DisplaySuccess(fmt.Sprintf("✓ 平台 '%s' 删除成功", name), theme)
 		return nil
 	},
 }
@@ -249,7 +253,8 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "显示 ccgate 版本信息",
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("ccgate version %s", Version)
+		theme := DefaultTheme()
+		pterm.Info.Printf("%s %s\n", theme.Colors.Primary.Sprint("ccgate version"), Version)
 		fmt.Printf("Commit: %s\n", Commit)
 		fmt.Printf("Build Date: %s\n", BuildDate)
 		fmt.Println("Claude Code 平台管理与透明代理工具")
@@ -259,7 +264,14 @@ var versionCmd = &cobra.Command{
 // Execute 执行根命令
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		color.Red("错误: %v", err)
+		theme := DefaultTheme()
+		uiErr := &UIError{
+			Type:      ErrorTypeSystem,
+			Message:   fmt.Sprintf("错误: %v", err),
+			Severity:  SeverityError,
+			Timestamp: time.Now(),
+		}
+		uiErr.DisplayError(theme)
 		os.Exit(1)
 	}
 }
