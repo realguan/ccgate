@@ -13,6 +13,11 @@ var (
 	cfgFile      string
 	platformName string
 	skipConfirm  bool
+
+	// 版本信息（通过 ldflags 在构建时注入）
+	Version   = "v0.0.0"
+	Commit    = "unknown"
+	BuildDate = "unknown"
 )
 
 // rootCmd 根命令
@@ -244,7 +249,9 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "显示 ccgate 版本信息",
 	Run: func(cmd *cobra.Command, args []string) {
-		color.Cyan("ccgate version 2.0.0")
+		color.Cyan("ccgate version %s", Version)
+		fmt.Printf("Commit: %s\n", Commit)
+		fmt.Printf("Build Date: %s\n", BuildDate)
 		fmt.Println("Claude Code 平台管理与透明代理工具")
 	},
 }
