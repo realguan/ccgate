@@ -13,12 +13,12 @@
 
 ### 方式一：二进制文件（推荐）
 
-从 [Releases](https://github.com/yourusername/ccgate/releases) 下载对应平台的二进制文件。
+从 [Releases](https://github.com/realguan/ccgate/releases) 下载对应平台的二进制文件。
 
 ### 方式二：源码编译
 
 ```bash
-git clone https://github.com/yourusername/ccgate.git
+git clone https://github.com/realguan/ccgate.git
 cd ccgate
 make build
 ```
