@@ -10,19 +10,19 @@ import (
 // Platform 定义了 Claude Code 需要的环境变量配置
 // 通过配置 Base URL，可以适配 MiniMax, GLM (智谱), Moonshot (Kimi) 等支持兼容接口的服务
 type Platform struct {
-	Name                string `json:"name"`
-	Description         string `json:"description,omitempty"` // 描述，例如 "MiniMax abab6.5"
-	Vendor              string `json:"vendor,omitempty"`      // 厂商，例如 "MiniMax", "ZhipuAI"
-	Pinned              bool   `json:"pinned,omitempty"`      // 是否置顶
-	
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"` // 描述，例如 "MiniMax abab6.5"
+	Vendor      string `json:"vendor,omitempty"`      // 厂商，例如 "MiniMax", "ZhipuAI"
+	Pinned      bool   `json:"pinned,omitempty"`      // 是否置顶
+
 	// 核心配置
 	AnthropicBaseURL    string `json:"ANTHROPIC_BASE_URL"`
 	AnthropicAuthToken  string `json:"ANTHROPIC_AUTH_TOKEN"`
 	AnthropicModel      string `json:"ANTHROPIC_MODEL"`
 	AnthropicSmallModel string `json:"ANTHROPIC_SMALL_FAST_MODEL,omitempty"`
-	
+
 	// 扩展配置 (备用，未来可能支持更多自定义 env)
-	ExtraEnv            map[string]string `json:"extra_env,omitempty"`
+	ExtraEnv map[string]string `json:"extra_env,omitempty"`
 }
 
 // Config 是顶层配置结构

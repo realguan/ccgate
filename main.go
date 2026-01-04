@@ -23,9 +23,9 @@ func main() {
 		Short: "Claude Code 的透明代理与配置管理工具",
 		Long: `ccgate 允许你管理多个 Claude Code 平台配置（包括官方和第三方兼容接口），
 并能以透明代理的方式启动 claude 客户端，自动注入相应的环境变量。`,
-		Version:             Version,
-		DisableFlagParsing:  false,
-		Run:                 runProxy,
+		Version:            Version,
+		DisableFlagParsing: false,
+		Run:                runProxy,
 	}
 
 	rootCmd.Flags().StringVarP(&platformName, "platform", "p", "", "直接指定要使用的平台名称")
@@ -49,13 +49,13 @@ func runProxy(cmd *cobra.Command, args []string) {
 	if len(config.Platforms) == 0 {
 		fmt.Printf("⚠️  未找到配置文件: %s\n", configPath)
 		fmt.Println("正在生成示例配置...")
-		
+
 		example := GenerateExampleConfig()
 		if err := SaveConfig(example, configPath); err != nil {
 			fmt.Printf("保存示例配置失败: %v\n", err)
 			os.Exit(1)
 		}
-		
+
 		fmt.Printf("✅ 已生成示例配置到: %s\n请编辑该文件填入真实的 API Key 后重新运行。\n", configPath)
 		os.Exit(0)
 	}
@@ -98,7 +98,7 @@ func runProxy(cmd *cobra.Command, args []string) {
 	if selectedPlatform.AnthropicSmallModel != "" {
 		env = append(env, fmt.Sprintf("ANTHROPIC_SMALL_FAST_MODEL=%s", selectedPlatform.AnthropicSmallModel))
 	}
-	
+
 	for k, v := range selectedPlatform.ExtraEnv {
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
@@ -116,7 +116,7 @@ func runProxy(cmd *cobra.Command, args []string) {
 	}
 
 	execArgs := append([]string{"claude"}, passArgs...)
-	
+
 	if err := syscall.Exec(claudePath, execArgs, env); err != nil {
 		fmt.Printf("❌ 启动 claude 失败: %v\n", err)
 		os.Exit(1)
