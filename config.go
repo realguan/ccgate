@@ -95,34 +95,19 @@ func GenerateExampleConfig() *Config {
 	}
 }
 
-// LoadConfig 加载配置，优先查找 ~/.cc-proxy/config.json，其次 ~/.ccgate/config.json
+// LoadConfig 加载配置
 func LoadConfig() (*Config, string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, "", err
 	}
 
-	// 路径优先级
-	paths := []string{
-		filepath.Join(home, ".cc-proxy", "config.json"),
-		filepath.Join(home, ".ccgate", "config.json"),
-	}
+	// 配置文件路径
+	configPath := filepath.Join(home, ".ccgate", "config.json")
 
-	var configPath string
-	var data []byte
-
-	for _, p := range paths {
-		d, err := os.ReadFile(p)
-		if err == nil {
-			configPath = p
-			data = d
-			break
-		}
-	}
-
-	// 如果都没找到，使用默认路径（虽然文件不存在）
-	if configPath == "" {
-		configPath = paths[0]
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// 文件不存在，返回空配置
 		return &Config{Platforms: []Platform{}}, configPath, nil
 	}
 
@@ -148,7 +133,7 @@ func SaveConfig(config *Config, path string) error {
 		if err != nil {
 			return err
 		}
-		path = filepath.Join(home, ".cc-proxy", "config.json")
+		path = filepath.Join(home, ".ccgate", "config.json")
 	}
 
 	// 确保目录存在

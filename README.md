@@ -68,7 +68,7 @@ go install github.com/realguan/ccgate@latest
 ccgate
 ```
 
-配置文件位于 `~/.cc-proxy/config.json`，格式如下：
+配置文件位于 `~/.ccgate/config.json`，格式如下：
 
 ```json
 {
@@ -170,10 +170,7 @@ ccgate --dry-run
 
 ### 配置文件路径
 
-ccgate 按以下优先级查找配置文件：
-
-1. `~/.cc-proxy/config.json`
-2. `~/.ccgate/config.json`
+配置文件默认路径为：`~/.ccgate/config.json`
 
 ## 开发
 
