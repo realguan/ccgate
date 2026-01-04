@@ -10,6 +10,9 @@ import (
 )
 
 var (
+	// Version 在编译时通过 ldflags 注入
+	Version = "dev"
+
 	platformName string
 	dryRun       bool
 )
@@ -20,8 +23,9 @@ func main() {
 		Short: "Claude Code 的透明代理与配置管理工具",
 		Long: `ccgate 允许你管理多个 Claude Code 平台配置（包括官方和第三方兼容接口），
 并能以透明代理的方式启动 claude 客户端，自动注入相应的环境变量。`,
-		DisableFlagParsing: false,
-		Run:                runProxy,
+		Version:             Version,
+		DisableFlagParsing:  false,
+		Run:                 runProxy,
 	}
 
 	rootCmd.Flags().StringVarP(&platformName, "platform", "p", "", "直接指定要使用的平台名称")
